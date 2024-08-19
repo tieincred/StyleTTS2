@@ -11,6 +11,7 @@ import torchaudio
 import librosa
 import click
 import shutil
+import wandb
 import warnings
 warnings.simplefilter('ignore')
 from torch.utils.tensorboard import SummaryWriter
@@ -33,7 +34,9 @@ from optimizers import build_optimizer
 from accelerate import Accelerator
 
 accelerator = Accelerator()
-
+API_KEY = "255323b364153609a4cbb91e6b4733c824b7f6a9"
+wandb.login(key = API_KEY)
+wandb.init(project="Spanish-training", name="StyleTTS2_finetuning")
 # simple fix for dataparallel that allows access to class attributes
 class MyDataParallel(torch.nn.DataParallel):
     def __getattr__(self, name):
@@ -266,6 +269,7 @@ def main(config_path):
             waves = batch[0]
             batch = [b.to(device) for b in batch[1:]]
             texts, input_lengths, ref_texts, ref_lengths, mels, mel_input_length, ref_mels = batch
+            print("hexa")
             with torch.no_grad():
                 mask = length_to_mask(mel_input_length // (2 ** n_down)).to(device)
                 mel_mask = length_to_mask(mel_input_length).to(device)
@@ -566,6 +570,20 @@ def main(config_path):
                 writer.add_scalar('train/gen_loss_slm', loss_gen_lm, iters)
                 
                 running_loss = 0
+                wandb.log({
+                    "loss_gen_all": loss_gen_all,
+                    "d_loss": d_loss,
+                    "ce_loss": loss_ce,
+                    "dur_loss": loss_dur,
+                    "slm_loss": loss_lm,
+                    "norm_loss": loss_norm_rec,
+                    "F0_loss": loss_F0_rec,
+                    "sty_loss": loss_sty,
+                    "diff_loss": loss_diff,
+                    "d_loss_slm": d_loss_slm,
+                    "gen_loss_slm": loss_gen_lm
+                })
+
                 
                 print('Time elasped:', time.time()-start_time)
             
@@ -686,7 +704,7 @@ def main(config_path):
         writer.add_scalar('eval/mel_loss', loss_test / iters_test, epoch + 1)
         writer.add_scalar('eval/dur_loss', loss_test / iters_test, epoch + 1)
         writer.add_scalar('eval/F0_loss', loss_f / iters_test, epoch + 1)
-        
+        wandb.log({"mel_loss_val" : loss_test/iters_test, "F0_loss_val" : loss_f/iters_test})
         
         if (epoch + 1) % save_freq == 0 :
             if (loss_test / iters_test) < best_loss:
@@ -712,3 +730,4 @@ def main(config_path):
                             
 if __name__=="__main__":
     main()
+
